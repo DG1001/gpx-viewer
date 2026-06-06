@@ -45,6 +45,10 @@ function fmtTime(d) {
   if (!d) return '–';
   return d.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
+function fmtDate(d) {
+  if (!d) return '–';
+  return d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+}
 function fmtMinSec(sec) {
   if (!isFinite(sec)) return '–';
   const m = Math.floor(sec / 60), s = Math.round(sec % 60);
@@ -888,6 +892,7 @@ function renderStats() {
     card.innerHTML = `
       <h3><span class="dot" style="background:${t.color}"></span>${escapeHtml(t.name)}</h3>
       <dl class="stats-grid">
+        <dt>Datum</dt><dd>${fmtDate(s.start)}</dd>
         <dt>Dauer</dt><dd>${fmtDuration(s.duration)}</dd>
         <dt>Strecke (2D)</dt><dd>${fmtDist(s.dist)}</dd>
         <dt>Ø Geschw.</dt><dd>${s.avgSpeed != null ? s.avgSpeed.toFixed(1) + ' km/h' : '–'}</dd>
