@@ -207,8 +207,19 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 760px) {
+  /* Topbar darf in die Hoehe wachsen und umbrechen, statt Buttons abzuschneiden. */
+  .topbar {
+    height: auto; min-height: var(--topbar-h);
+    flex-wrap: wrap; align-items: center;
+    padding: 6px 10px; gap: 6px 8px;
+  }
+  .brand { flex: 0 0 auto; }
+  .actions { gap: 6px; row-gap: 6px; justify-content: flex-start; }
+  .btn { padding: 6px 10px; font-size: 13px; }
+  /* Faerbung & Thermik bleiben erreichbar (vorher komplett ausgeblendet). */
+  .color-mode { font-size: 12px; }
+
   .layout { flex-direction: column; }
   .sidebar { flex: 0 0 auto; max-height: 30vh; border-right: none; border-bottom: 1px solid var(--border); }
-  .color-mode { display: none; }
   :root { --profile-h: 160px; }
 }
