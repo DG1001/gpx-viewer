@@ -1,0 +1,172 @@
+:root {
+  --bg: #f5f7fa;
+  --panel: #ffffff;
+  --border: #e2e6ec;
+  --text: #1f2933;
+  --muted: #6b7785;
+  --accent: #1e88e5;
+  --accent-dark: #1565c0;
+  --shadow: 0 1px 3px rgba(0, 0, 0, .12), 0 1px 2px rgba(0, 0, 0, .08);
+  --topbar-h: 52px;
+  --profile-h: 200px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+body { display: flex; flex-direction: column; overflow: hidden; }
+
+/* ---------- Topbar ---------- */
+.topbar {
+  height: var(--topbar-h);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  z-index: 1000;
+}
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; }
+.actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.color-mode { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+.color-mode select { font: inherit; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+
+.btn {
+  font: inherit;
+  font-size: 14px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.btn:hover { background: #eef2f7; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { background: var(--accent-dark); }
+
+/* ---------- Layout ---------- */
+.layout { flex: 1 1 auto; display: flex; min-height: 0; }
+
+.sidebar {
+  flex: 0 0 260px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 12px;
+  overflow-y: auto;
+}
+.sidebar h2 { margin: 0 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+
+.track-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.track-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+.track-item .swatch { width: 14px; height: 14px; border-radius: 3px; flex: 0 0 auto; cursor: pointer; border: 1px solid rgba(0,0,0,.15); }
+.track-item .tname { flex: 1 1 auto; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track-item .tname small { display: block; color: var(--muted); font-size: 11px; }
+.track-item button { border: none; background: transparent; cursor: pointer; color: var(--muted); font-size: 16px; line-height: 1; padding: 2px 4px; border-radius: 4px; }
+.track-item button:hover { background: #eef2f7; color: var(--text); }
+.track-item.hidden-track { opacity: .5; }
+.track-item input[type=checkbox] { width: 16px; height: 16px; }
+
+.empty-hint { color: var(--muted); font-size: 13px; }
+
+.content { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.map { flex: 1 1 auto; min-height: 0; background: #dfe6ee; }
+
+.profile-panel {
+  flex: 0 0 var(--profile-h);
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.profile-toolbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 4px 12px; font-size: 13px; color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.profile-title { font-weight: 600; color: var(--text); }
+.profile-toolbar label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.hover-readout { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text); }
+.profile-canvas { flex: 1 1 auto; width: 100%; min-height: 0; display: block; cursor: crosshair; }
+
+.stats-panel {
+  flex: 0 0 auto;
+  display: flex; flex-wrap: wrap; gap: 0;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  padding: 0;
+  max-height: 150px; overflow-y: auto;
+}
+.stats-card {
+  flex: 1 1 220px;
+  padding: 8px 14px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.stats-card h3 { margin: 0 0 4px; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.stats-card h3 .dot { width: 10px; height: 10px; border-radius: 50%; }
+.stats-grid { display: grid; grid-template-columns: auto auto; gap: 1px 12px; font-size: 12px; }
+.stats-grid dt { color: var(--muted); }
+.stats-grid dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- Dropzone ---------- */
+.dropzone {
+  position: fixed; inset: 0;
+  display: none;
+  align-items: center; justify-content: center;
+  background: rgba(30, 136, 229, .08);
+  backdrop-filter: blur(2px);
+  z-index: 2000;
+  pointer-events: none;
+}
+.dropzone.dragging { display: flex; border: 4px dashed var(--accent); }
+.dropzone.empty-state { display: flex; background: var(--bg); }
+.dropzone-inner { text-align: center; color: var(--accent); padding: 32px; }
+.dropzone-inner p { margin: 6px 0; color: var(--text); }
+.dropzone-inner .muted { color: var(--muted); font-size: 13px; }
+
+/* ---------- Toast ---------- */
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: #323a45; color: #fff; padding: 10px 16px; border-radius: 8px;
+  font-size: 14px; box-shadow: var(--shadow); opacity: 0; pointer-events: none;
+  transition: opacity .2s, transform .2s; z-index: 3000; max-width: 80vw;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.error { background: #c62828; }
+
+/* Map hover marker */
+.hover-dot {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; border: 3px solid var(--accent);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.3);
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 760px) {
+  .layout { flex-direction: column; }
+  .sidebar { flex: 0 0 auto; max-height: 30vh; border-right: none; border-bottom: 1px solid var(--border); }
+  .color-mode { display: none; }
+  :root { --profile-h: 160px; }
+}

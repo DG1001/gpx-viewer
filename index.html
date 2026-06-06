@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <meta name="theme-color" content="#1e88e5" />
+  <meta name="description" content="GPX/IGC-Viewer – Flug-Tracks ansehen, rein clientseitig, offline-fähig." />
+  <title>GPX Viewer</title>
+
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+
+  <!-- Leaflet (CDN) -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin="" />
+  <script
+    defer
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""></script>
+
+  <link rel="stylesheet" href="style.css" />
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <path d="M3 18l6-12 4 7 3-4 5 9z" fill="none" stroke="#1e88e5" stroke-width="2" stroke-linejoin="round"/>
+      </svg>
+      <span>GPX Viewer</span>
+    </div>
+    <div class="actions">
+      <input id="file-input" type="file" accept=".gpx,.igc,application/gpx+xml" multiple hidden />
+      <button id="open-btn" class="btn primary">Dateien öffnen…</button>
+      <button id="fit-btn" class="btn" title="Alle Tracks einpassen">Einpassen</button>
+      <label class="color-mode">
+        Färbung:
+        <select id="colormode">
+          <option value="track">Pro Track</option>
+          <option value="ele">Nach Höhe</option>
+          <option value="climb">Nach Steigen</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar" id="sidebar">
+      <h2>Tracks</h2>
+      <ul id="track-list" class="track-list"></ul>
+      <p id="empty-hint" class="empty-hint">Noch keine Tracks geladen.</p>
+    </aside>
+
+    <section class="content">
+      <div id="map" class="map"></div>
+
+      <div class="profile-panel" id="profile-panel">
+        <div class="profile-toolbar">
+          <span class="profile-title">Profil</span>
+          <label><input type="radio" name="profmetric" value="ele" checked /> Höhe</label>
+          <label><input type="radio" name="profmetric" value="speed" /> Geschwindigkeit</label>
+          <label><input type="radio" name="profmetric" value="vario" /> Steigen</label>
+          <span id="hover-readout" class="hover-readout"></span>
+        </div>
+        <canvas id="profile" class="profile-canvas"></canvas>
+      </div>
+
+      <div class="stats-panel" id="stats-panel"></div>
+    </section>
+  </main>
+
+  <!-- Empty / drop overlay -->
+  <div id="dropzone" class="dropzone">
+    <div class="dropzone-inner">
+      <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
+        <path d="M12 16V4m0 0l-4 4m4-4l4 4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"
+              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <p><strong>GPX hierher ziehen oder öffnen</strong></p>
+      <p class="muted">.gpx und .igc werden unterstützt – alles bleibt lokal auf deinem Gerät.</p>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
