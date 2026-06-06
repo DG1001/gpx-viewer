@@ -28,8 +28,9 @@ startbar.
   Drehrate), Bärte mit Steigwert/Höhengewinn/Dauer als Marker auf der Karte und als
   Band im Profil; **Kreisen-Anteil**, **Gleitzahl (L/D)**, **bestes 30-s-Steigen** und
   **Windschätzung aus der Kreisdrift** (Pfeil oben rechts). Vario wird geglättet.
-- **Kartenwechsel**: OpenStreetMap / OpenTopoMap / Satellit (Esri) + optionales
-  **Luftraum-Overlay (openAIP)**.
+- **Kartenwechsel**: OpenStreetMap / OpenTopoMap / Satellit (Esri) + **Luftraum-Overlay**
+  aus den **kostenlosen DAeC-OpenAir-Daten** (Polygone, Kreise, Bögen; klassenabhängige
+  Farben; ganz ohne API-Key).
 - **Offline-fähig**: Service Worker cached App-Shell, Leaflet-CDN und Karten-Tiles.
 - **IGC** (Segelflug) optional unterstützt: B-Records (Zeit, Lat/Lon, GPS-/Druckhöhe).
 
@@ -108,16 +109,34 @@ gegeben, lokal `localhost` verwenden.
       Kacheln bleiben sichtbar.
 - [x] **File-Handler** im Manifest korrekt deklariert (`file_handlers` → `.gpx`).
 
-## Luftraum-Overlay (openAIP)
+## Luftraum-Overlay (DAeC, OpenAir – kostenlos & ohne Key)
 
-Das Luftraum-Overlay wird über den Layer-Schalter (oben rechts auf der Karte)
-eingeschaltet. openAIP benötigt einen **kostenlosen API-Key**:
+Die deutschen Lufträume kommen aus den **frei verfügbaren OpenAir-Daten des DAeC**
+(erstellt von der Bundeskommission Segelflug). Sie liegen als
+`airspace/de_openair.txt` **im Repo bei** und werden clientseitig zu Leaflet-Polygonen,
+-Kreisen und -Bögen geparst — kein API-Key, keine fremde Tile-API.
 
-1. Konto auf [openaip.net](https://www.openaip.net) anlegen → *My openAIP → API Keys*.
-2. Beim ersten Einschalten des Overlays fragt die App nach dem Key — er wird **nur
-   lokal** (`localStorage`) gespeichert und bei jeder Kachel-Anfrage mitgesendet.
+- Einschalten über den **Layer-Schalter** (oben rechts auf der Karte) → „Luftraum (DAeC)".
+- Beim ersten Einschalten wird die Datei geladen (danach vom Service Worker gecached,
+  also **offline** verfügbar). Farben nach Klasse (R/P rot, Q orange, C/D blau,
+  CTR magenta, TMZ/RMZ gestrichelt …); Tooltip zeigt Name, Klasse und Unter-/Obergrenze.
+- **Eigene OpenAir-Datei** laden: einfach eine `.txt`/`.air`/`.openair` per Drag & Drop
+  oder über „Dateien öffnen…" reinziehen — sie ersetzt das Overlay.
 
-Ohne Key bleiben die anderen Karten (OSM/Topo/Satellit) voll nutzbar.
+### Daten aktualisieren
+
+Der DAeC aktualisiert die Daten je AIRAC. Zum Auffrischen der mitgelieferten Datei:
+
+```bash
+./update-airspace.sh        # lädt die aktuelle OpenAir-Datei vom DAeC-Server
+# oder mit expliziter URL (Dateiname enthält den Stand):
+./update-airspace.sh "https://www.daec.de/media/files/.../JJJJ_NNx_Airspace_Germany_OA1.txt"
+```
+
+> Hinweis: Der DAeC-Server sendet keine CORS-Header, daher lädt die App die Datei
+> **nicht live** aus dem Browser, sondern aus der mitgelieferten (same-origin) Kopie.
+> Quelle: <https://www.daec.de/fachbereiche/luftraum-flugsicherheit-betrieb/luftraumdaten/>
+> Die Daten sind ohne Gewähr und nicht für navigatorische Zwecke freigegeben.
 
 ## Hinweise zur Segelflug-Analyse
 

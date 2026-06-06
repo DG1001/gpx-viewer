@@ -1,5 +1,5 @@
 // Service Worker – App-Shell-Precache + Runtime-Caches für Leaflet-CDN und OSM-Tiles.
-const VERSION = 'v5';
+const VERSION = 'v6';
 const SHELL_CACHE = `gpxv-shell-${VERSION}`;
 const CDN_CACHE = `gpxv-cdn-${VERSION}`;
 const TILE_CACHE = `gpxv-tiles-${VERSION}`;
@@ -50,11 +50,10 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // Karten-Kacheln: OSM, OpenTopoMap, Esri-Satellit, openAIP-Luftraum
+  // Karten-Kacheln: OSM, OpenTopoMap, Esri-Satellit
   if (/(^|\.)tile\.openstreetmap\.org$/.test(url.hostname) ||
       url.hostname.endsWith('tile.opentopomap.org') ||
-      url.hostname === 'server.arcgisonline.com' ||
-      url.hostname === 'api.tiles.openaip.net') {
+      url.hostname === 'server.arcgisonline.com') {
     event.respondWith(staleWhileRevalidate(req, TILE_CACHE));
     return;
   }

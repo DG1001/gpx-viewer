@@ -331,7 +331,8 @@ function addTrack(rawName, points, fileName) {
 // ---------------------------------------------------------------------------
 // Karte (Leaflet)
 // ---------------------------------------------------------------------------
-let airspaceLayer = null;
+let airspaceGroup = null;
+let airspaceLoaded = false;
 
 function initMap() {
   map = L.map('map', { zoomControl: true, preferCanvas: true }).setView([47.5, 9.5], 7);
@@ -347,40 +348,140 @@ function initMap() {
   });
   osm.addTo(map);
 
-  // openAIP-Luftraum (benötigt kostenlosen API-Key – lokal gespeichert)
-  airspaceLayer = L.tileLayer('https://api.tiles.openaip.net/api/data/openaip/{z}/{x}/{y}.png?apiKey={apiKey}', {
-    maxZoom: 19, maxNativeZoom: 11, opacity: 0.85, crossOrigin: true,
-    apiKey: localStorage.getItem('openaip_key') || '',
-    attribution: 'Luftraum: &copy; <a href="https://www.openaip.net">openAIP</a>',
-  });
+  // Luftraum (DAeC, OpenAir) – kostenlos & ohne Key, als Vektor-Overlay.
+  // Lazy: wird erst beim Einschalten geladen.
+  airspaceGroup = L.layerGroup();
 
   L.control.layers(
     { 'OpenStreetMap': osm, 'OpenTopoMap': topo, 'Satellit (Esri)': sat },
-    { 'Luftraum (openAIP)': airspaceLayer },
+    { 'Luftraum (DAeC)': airspaceGroup },
     { collapsed: true }
   ).addTo(map);
 
-  map.on('overlayadd', (e) => { if (e.layer === airspaceLayer) ensureOpenaipKey(); });
+  map.on('overlayadd', (e) => { if (e.layer === airspaceGroup) loadAirspaceFromBundle(); });
 
   initWindControl();
 }
 
-function ensureOpenaipKey() {
-  let key = localStorage.getItem('openaip_key');
-  if (key) return;
-  key = prompt('openAIP benötigt einen kostenlosen API-Key.\n' +
-    'Anlegen unter openaip.net → Login → "My openAIP" → API Keys.\n' +
-    'Der Key bleibt lokal in diesem Browser gespeichert:');
-  if (key && key.trim()) {
-    key = key.trim();
-    localStorage.setItem('openaip_key', key);
-    airspaceLayer.options.apiKey = key;
-    airspaceLayer.redraw();
-    toast('openAIP-Key gespeichert.');
-  } else {
-    map.removeLayer(airspaceLayer);
-    toast('Ohne API-Key kann der Luftraum nicht geladen werden.', true);
+// ---------------------------------------------------------------------------
+// Luftraum: OpenAir-Parser (DP-Polygone, DC-Kreise, DB-Bögen) → Leaflet
+// ---------------------------------------------------------------------------
+function parseDMS(tok) {
+  const m = tok.match(/([\d.]+):([\d.]+)(?::([\d.]+))?\s*([NSEWnsew])/);
+  if (!m) return null;
+  let v = parseFloat(m[1]) + parseFloat(m[2]) / 60 + (m[3] ? parseFloat(m[3]) : 0) / 3600;
+  const h = m[4].toUpperCase();
+  if (h === 'S' || h === 'W') v = -v;
+  return v;
+}
+function parseCoordPair(s) {
+  const m = s.match(/([\d.]+:[\d.]+(?::[\d.]+)?\s*[NSns])\s+([\d.]+:[\d.]+(?::[\d.]+)?\s*[EWew])/);
+  if (!m) return null;
+  const lat = parseDMS(m[1]), lon = parseDMS(m[2]);
+  return (lat == null || lon == null) ? null : [lat, lon];
+}
+function destPoint(center, radiusM, brgDeg) {
+  const Re = 6371000, br = brgDeg * Math.PI / 180;
+  const φ1 = center[0] * Math.PI / 180, λ1 = center[1] * Math.PI / 180, δ = radiusM / Re;
+  const φ2 = Math.asin(Math.sin(φ1) * Math.cos(δ) + Math.cos(φ1) * Math.sin(δ) * Math.cos(br));
+  const λ2 = λ1 + Math.atan2(Math.sin(br) * Math.sin(δ) * Math.cos(φ1), Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2));
+  return [φ2 * 180 / Math.PI, λ2 * 180 / Math.PI];
+}
+function arcPoints(center, p1, p2, dir) {
+  const c = { lat: center[0], lon: center[1] };
+  const r = haversine(c, { lat: p1[0], lon: p1[1] });
+  const a1 = (bearing(c, { lat: p1[0], lon: p1[1] }) + 360) % 360;
+  const a2 = (bearing(c, { lat: p2[0], lon: p2[1] }) + 360) % 360;
+  let sweep = a2 - a1;
+  if (dir > 0 && sweep < 0) sweep += 360;
+  if (dir < 0 && sweep > 0) sweep -= 360;
+  const steps = Math.max(2, Math.ceil(Math.abs(sweep) / 4));
+  const out = [p1];
+  for (let i = 1; i <= steps; i++) out.push(destPoint(center, r, a1 + sweep * i / steps));
+  return out;
+}
+function parseOpenAir(text) {
+  const asps = [];
+  let cur = null, center = null, dir = 1;
+  const flush = () => { if (cur && (cur.circle || cur.latlngs.length >= 3)) asps.push(cur); };
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line[0] === '*') continue;
+    const u = line.toUpperCase();
+    if (u.startsWith('AC')) { flush(); cur = { cls: line.slice(2).trim(), name: '', top: '', bottom: '', latlngs: [], circle: null }; dir = 1; continue; }
+    if (!cur) continue;
+    if (u.startsWith('AN')) cur.name = line.slice(2).trim();
+    else if (u.startsWith('AH')) cur.top = line.slice(2).trim();
+    else if (u.startsWith('AL')) cur.bottom = line.slice(2).trim();
+    else if (u.startsWith('V')) {
+      const mx = line.match(/V\s+X\s*=\s*(.+)/i); if (mx) center = parseCoordPair(mx[1]);
+      const md = line.match(/V\s+D\s*=\s*([+-])/i); if (md) dir = md[1] === '-' ? -1 : 1;
+    }
+    else if (u.startsWith('DP')) { const p = parseCoordPair(line.slice(2)); if (p) cur.latlngs.push(p); }
+    else if (u.startsWith('DC')) { const r = parseFloat(line.slice(2)); if (center && r > 0) cur.circle = { center, radiusM: r * 1852 }; }
+    else if (u.startsWith('DB')) {
+      const parts = line.slice(2).split(',');
+      const p1 = parseCoordPair(parts[0] || ''), p2 = parseCoordPair(parts[1] || '');
+      if (center && p1 && p2) for (const pp of arcPoints(center, p1, p2, dir)) cur.latlngs.push(pp);
+    }
   }
+  flush();
+  return asps;
+}
+function airspaceStyle(cls) {
+  const c = (cls || '').toUpperCase().trim();
+  const base = { weight: 1, fillOpacity: 0.05, opacity: 0.8 };
+  if (c === 'R' || c === 'P') return { ...base, color: '#d32f2f', fillColor: '#d32f2f' };
+  if (c === 'Q') return { ...base, color: '#f57c00', fillColor: '#f57c00', dashArray: '4 3' };
+  if (c === 'CTR') return { ...base, color: '#c2185b', fillColor: '#c2185b' };
+  if (c === 'C' || c === 'D') return { ...base, color: '#1976d2', fillColor: '#1976d2' };
+  if (c === 'TMZ') return { ...base, color: '#7b1fa2', fillColor: '#7b1fa2', dashArray: '5 4' };
+  if (c === 'RMZ') return { ...base, color: '#388e3c', fillColor: '#388e3c', dashArray: '5 4' };
+  if (c === 'W') return { ...base, color: '#0097a7', fillColor: '#0097a7' };
+  return { ...base, color: '#616161', fillColor: '#616161' };
+}
+function populateAirspace(group, text) {
+  group.clearLayers();
+  const asps = parseOpenAir(text);
+  let count = 0;
+  for (const a of asps) {
+    const st = airspaceStyle(a.cls);
+    const shape = a.circle ? L.circle(a.circle.center, { radius: a.circle.radiusM, ...st })
+                           : L.polygon(a.latlngs, st);
+    shape.bindTooltip(
+      `<b>${escapeHtml(a.name || '–')}</b><br>Klasse ${escapeHtml(a.cls)} · ${escapeHtml(a.bottom)} – ${escapeHtml(a.top)}`,
+      { sticky: true }
+    );
+    group.addLayer(shape);
+    count++;
+  }
+  return count;
+}
+async function loadAirspaceFromBundle() {
+  if (airspaceLoaded) return;
+  airspaceLoaded = true;
+  try {
+    toast('Lade Luftraum (DAeC)…');
+    const r = await fetch('./airspace/de_openair.txt');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const count = populateAirspace(airspaceGroup, await r.text());
+    toast(`Luftraum: ${count} Gebiete geladen (DAeC OpenAir).`);
+  } catch (e) {
+    airspaceLoaded = false;
+    toast('Luftraum nicht ladbar: ' + e.message + ' (offline? einmal online laden).', true);
+  }
+}
+function loadOpenAirText(text, fileName) {
+  const count = populateAirspace(airspaceGroup, text);
+  airspaceLoaded = true;
+  if (!map.hasLayer(airspaceGroup)) airspaceGroup.addTo(map);
+  toast(`Luftraum „${fileName}": ${count} Gebiete geladen.`);
+}
+function isOpenAir(name, text) {
+  const n = name.toLowerCase();
+  if (n.endsWith('.air') || n.endsWith('.openair')) return true;
+  if (n.endsWith('.gpx') || n.endsWith('.igc')) return false;
+  return /^\s*AC\s+\S/m.test(text) && /^\s*DP\s+/m.test(text);
 }
 
 // Wind-Anzeige (Leaflet-Control, oben rechts)
@@ -824,6 +925,7 @@ async function loadFile(file) {
   try {
     const text = await file.text();
     const lower = file.name.toLowerCase();
+    if (isOpenAir(file.name, text)) { loadOpenAirText(text, file.name); return; }
     let parsed;
     if (lower.endsWith('.igc')) parsed = parseIGC(text);
     else if (lower.endsWith('.gpx') || text.includes('<gpx')) parsed = parseGPX(text);
