@@ -1,5 +1,5 @@
 // Service Worker – App-Shell-Precache + Runtime-Caches für Leaflet-CDN und OSM-Tiles.
-const VERSION = 'v8';
+const VERSION = 'v9';
 const SHELL_CACHE = `gpxv-shell-${VERSION}`;
 const CDN_CACHE = `gpxv-cdn-${VERSION}`;
 const TILE_CACHE = `gpxv-tiles-${VERSION}`;

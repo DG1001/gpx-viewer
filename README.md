@@ -149,16 +149,21 @@ Der DAeC aktualisiert die Daten je AIRAC. Zum Auffrischen der mitgelieferten Dat
 - **Terrain** aus freien Terrain-RGB-Kacheln (AWS „Terrain Tiles", terrarium-Encoding)
   — **kein API-Key**, CORS-fähig. Darüber wahlweise **Satellit (Esri)** oder
   **OpenStreetMap**.
-- Der Flug wird als **Höhen-Wand** dargestellt: eine Wand vom Boden bis zur jeweiligen
-  Flughöhe, nach Höhe eingefärbt — so sieht man die Höhe über Grund. Zusätzlich die
-  Bodenspur als Linie.
-- **Überhöhungs-Regler** für die Geländeüberhöhung, Wand ein/ausblendbar, Basiskarte
-  umschaltbar. Maus: Drag = drehen/neigen (mittlere/rechte Taste), Rad = Zoom.
-  **Esc** oder „Schließen" beendet die Ansicht.
+- **Schwebende 3D-Linie** (Standard): die Flugbahn frei im Raum auf der **echten
+  Flughöhe** (Three.js als Custom-Layer in MapLibre), nach Höhe eingefärbt — beim
+  Kreisen sieht man die Spirale in der Luft, getrennt vom Gelände. Dazu die **Bodenspur**
+  als gedämpfte Linie (Schatten).
+- **Droplines** (optional): dünne senkrechte Linien von der Bahn zum Boden für mehr
+  Tiefenwirkung.
+- **Höhen-Wand** (optional): Vorhang vom Boden bis zur Flughöhe — zeigt flächig die
+  Höhe über Grund.
+- **Überhöhungs-Regler** (Gelände + Flughöhe bleiben konsistent), Basiskarte umschaltbar.
+  Maus: Drag = drehen/neigen (mittlere/rechte Taste), Rad = Zoom. **Esc** oder
+  „Schließen" beendet die Ansicht.
 
-MapLibre GL JS wird **erst beim ersten Öffnen** per CDN nachgeladen (die App bleibt
-ansonsten schlank). 3D braucht **WebGL2**; Terrain-Kacheln werden online geladen und
-danach vom Service Worker gecached.
+MapLibre GL JS **und** Three.js werden **erst beim ersten Öffnen** per CDN nachgeladen
+(die App bleibt ansonsten schlank). 3D braucht **WebGL2**; Terrain-Kacheln werden online
+geladen und danach vom Service Worker gecached.
 
 ## Hinweise zur Segelflug-Analyse
 
