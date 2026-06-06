@@ -1,5 +1,5 @@
 // Service Worker – App-Shell-Precache + Runtime-Caches für Leaflet-CDN und OSM-Tiles.
-const VERSION = 'v7';
+const VERSION = 'v8';
 const SHELL_CACHE = `gpxv-shell-${VERSION}`;
 const CDN_CACHE = `gpxv-cdn-${VERSION}`;
 const TILE_CACHE = `gpxv-tiles-${VERSION}`;
@@ -35,13 +35,16 @@ self.addEventListener('activate', (event) => {
 function staleWhileRevalidate(request, cacheName) {
   return caches.open(cacheName).then((cache) =>
     cache.match(request).then((cached) => {
+      // Eine opaque Antwort darf NUR an no-cors-Anfragen zurückgegeben werden,
+      // sonst wirft der Browser einen Netzwerkfehler.
+      const cachedUsable = cached && (request.mode === 'no-cors' || cached.type !== 'opaque') ? cached : null;
       const network = fetch(request)
         .then((resp) => {
           if (resp && (resp.ok || resp.type === 'opaque')) cache.put(request, resp.clone());
           return resp;
         })
-        .catch(() => cached);
-      return cached || network;
+        .catch(() => cachedUsable);
+      return cachedUsable || network;
     })
   );
 }
