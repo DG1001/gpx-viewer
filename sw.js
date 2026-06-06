@@ -1,5 +1,5 @@
 // Service Worker – App-Shell-Precache + Runtime-Caches für Leaflet-CDN und OSM-Tiles.
-const VERSION = 'v6';
+const VERSION = 'v7';
 const SHELL_CACHE = `gpxv-shell-${VERSION}`;
 const CDN_CACHE = `gpxv-cdn-${VERSION}`;
 const TILE_CACHE = `gpxv-tiles-${VERSION}`;
@@ -8,6 +8,7 @@ const SHELL_ASSETS = [
   './',
   './index.html',
   './app.js',
+  './map3d.js',
   './style.css',
   './manifest.webmanifest',
   './icons/icon-192.png',
@@ -50,10 +51,11 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // Karten-Kacheln: OSM, OpenTopoMap, Esri-Satellit
+  // Karten-Kacheln: OSM, OpenTopoMap, Esri-Satellit, AWS-Terrain (3D-DEM)
   if (/(^|\.)tile\.openstreetmap\.org$/.test(url.hostname) ||
       url.hostname.endsWith('tile.opentopomap.org') ||
-      url.hostname === 'server.arcgisonline.com') {
+      url.hostname === 'server.arcgisonline.com' ||
+      (url.hostname === 's3.amazonaws.com' && url.pathname.startsWith('/elevation-tiles-prod'))) {
     event.respondWith(staleWhileRevalidate(req, TILE_CACHE));
     return;
   }

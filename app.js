@@ -1,5 +1,6 @@
 // GPX Viewer – reine clientseitige PWA. Keine Build-Tools, keine externen Parser.
 // Module: app.js
+import { open3D } from './map3d.js';
 
 const COLORS = [
   '#e53935', '#1e88e5', '#43a047', '#fb8c00', '#8e24aa',
@@ -972,6 +973,12 @@ function initUI() {
   document.getElementById('open-btn').addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', () => { loadFiles(fileInput.files); fileInput.value = ''; });
   document.getElementById('fit-btn').addEventListener('click', fitAll);
+  document.getElementById('view3d-btn').addEventListener('click', () => {
+    const vis = state.tracks.filter(t => t.visible);
+    if (!vis.length) { toast('Kein sichtbarer Track für die 3D-Ansicht.', true); return; }
+    toast('Lade 3D-Gelände …');
+    open3D(vis).catch(err => toast('3D-Ansicht: ' + err.message, true));
+  });
 
   document.getElementById('colormode').addEventListener('change', (e) => {
     state.colorMode = e.target.value; redrawAllLayers();

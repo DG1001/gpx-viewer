@@ -31,6 +31,9 @@ startbar.
 - **Kartenwechsel**: OpenStreetMap / OpenTopoMap / Satellit (Esri) + **Luftraum-Overlay**
   aus den **kostenlosen DAeC-OpenAir-Daten** (Polygone, Kreise, Bögen; klassenabhängige
   Farben; ganz ohne API-Key).
+- **3D-Geländeansicht** (Button „3D"): echtes Terrain aus **freien Terrain-RGB-Kacheln**
+  (kein Key) mit MapLibre GL, Satellit/OSM drübergelegt; der Flug als **Höhen-Wand**
+  (Vorhang vom Boden bis zur Flughöhe, nach Höhe eingefärbt) + Überhöhungsregler.
 - **Offline-fähig**: Service Worker cached App-Shell, Leaflet-CDN und Karten-Tiles.
 - **IGC** (Segelflug) optional unterstützt: B-Records (Zeit, Lat/Lon, GPS-/Druckhöhe).
 
@@ -137,6 +140,25 @@ Der DAeC aktualisiert die Daten je AIRAC. Zum Auffrischen der mitgelieferten Dat
 > **nicht live** aus dem Browser, sondern aus der mitgelieferten (same-origin) Kopie.
 > Quelle: <https://www.daec.de/fachbereiche/luftraum-flugsicherheit-betrieb/luftraumdaten/>
 > Die Daten sind ohne Gewähr und nicht für navigatorische Zwecke freigegeben.
+
+## 3D-Geländeansicht
+
+Über den Button **„3D"** öffnet sich eine Vollbild-Ansicht (MapLibre GL JS) mit
+**echtem Gelände**:
+
+- **Terrain** aus freien Terrain-RGB-Kacheln (AWS „Terrain Tiles", terrarium-Encoding)
+  — **kein API-Key**, CORS-fähig. Darüber wahlweise **Satellit (Esri)** oder
+  **OpenStreetMap**.
+- Der Flug wird als **Höhen-Wand** dargestellt: eine Wand vom Boden bis zur jeweiligen
+  Flughöhe, nach Höhe eingefärbt — so sieht man die Höhe über Grund. Zusätzlich die
+  Bodenspur als Linie.
+- **Überhöhungs-Regler** für die Geländeüberhöhung, Wand ein/ausblendbar, Basiskarte
+  umschaltbar. Maus: Drag = drehen/neigen (mittlere/rechte Taste), Rad = Zoom.
+  **Esc** oder „Schließen" beendet die Ansicht.
+
+MapLibre GL JS wird **erst beim ersten Öffnen** per CDN nachgeladen (die App bleibt
+ansonsten schlank). 3D braucht **WebGL2**; Terrain-Kacheln werden online geladen und
+danach vom Service Worker gecached.
 
 ## Hinweise zur Segelflug-Analyse
 

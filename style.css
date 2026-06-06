@@ -146,6 +146,21 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 .dropzone-inner p { margin: 6px 0; color: var(--text); }
 .dropzone-inner .muted { color: var(--muted); font-size: 13px; }
 
+/* ---------- 3D-Overlay ---------- */
+.map3d-overlay { position: fixed; inset: 0; z-index: 2500; background: #0b1622; display: flex; flex-direction: column; }
+#map3d { flex: 1 1 auto; min-height: 0; }
+.map3d-bar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 8px 14px; background: var(--panel); border-top: 1px solid var(--border);
+  font-size: 13px; box-shadow: 0 -1px 3px rgba(0,0,0,.15);
+}
+.map3d-bar .m3d-ctl { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.map3d-bar input[type=range] { width: 110px; }
+.map3d-bar .btn { margin-left: auto; }
+.m3d-legend { display: flex; align-items: center; gap: 6px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.m3d-grad { display: inline-block; width: 90px; height: 10px; border-radius: 3px;
+  background: linear-gradient(90deg, #2c7bb6, #00a6ca, #a6d96a, #fdae61, #d7191c); }
+
 /* ---------- Toast ---------- */
 .toast {
   position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px);
