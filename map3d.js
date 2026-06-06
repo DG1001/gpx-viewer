@@ -212,7 +212,10 @@ export async function open3D(tracks) {
       layout: { visibility: 'none' },
       paint: {
         'fill-extrusion-color': ['interpolate', ['linear'], ['get', 'ele'], ...stops],
-        'fill-extrusion-base': 0, 'fill-extrusion-height': ['get', 'height'], 'fill-extrusion-opacity': 0.5,
+        'fill-extrusion-base': 0,
+        // gleiche Überhöhung wie Terrain & 3D-Linie, damit Wand-Oberkante = Flugbahn
+        'fill-extrusion-height': ['*', ['get', 'height'], flags.exag],
+        'fill-extrusion-opacity': 0.5,
       },
     });
     map.addSource('track-line', { type: 'geojson', data: data.line });
@@ -242,6 +245,8 @@ export async function open3D(tracks) {
   overlay.querySelector('#m3d-exag').addEventListener('input', (e) => {
     flags.exag = parseFloat(e.target.value);
     map.setTerrain({ source: 'dem', exaggeration: flags.exag });
+    if (map.getLayer('track-wall'))
+      map.setPaintProperty('track-wall', 'fill-extrusion-height', ['*', ['get', 'height'], flags.exag]);
     if (scene3d) { rebuildScene(map, tracks, data); map.triggerRepaint(); }
   });
   overlay.querySelector('#m3d-line').addEventListener('change', (e) => { flags.showLine = e.target.checked; map.triggerRepaint(); });
