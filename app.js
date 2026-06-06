@@ -965,6 +965,31 @@ if ('launchQueue' in window && 'LaunchParams' in window) {
   });
 }
 
+// Web Share Target: nach „Teilen mit GPX Viewer" landet die App auf
+// ./?share-target=1 – die Dateien liegen im vom SW befüllten Cache.
+async function consumeSharedFiles() {
+  const url = new URL(location.href);
+  if (!url.searchParams.has('share-target')) return;
+  url.searchParams.delete('share-target');
+  history.replaceState(null, '', url.pathname + url.search + url.hash);
+  if (!('caches' in window)) return;
+  try {
+    const cache = await caches.open('gpxv-share');
+    const files = [];
+    for (const key of await cache.keys()) {
+      const resp = await cache.match(key);
+      if (!resp) continue;
+      const name = decodeURIComponent(resp.headers.get('X-Filename') || 'track.gpx');
+      const blob = await resp.blob();
+      files.push(new File([blob], name, { type: blob.type }));
+      await cache.delete(key);
+    }
+    if (files.length) await loadFiles(files);
+  } catch (err) {
+    toast('Geteilte Datei konnte nicht geladen werden: ' + err.message, true);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Drag & Drop / Buttons
 // ---------------------------------------------------------------------------
@@ -992,6 +1017,10 @@ function initUI() {
   });
 
   const dz = document.getElementById('dropzone');
+  // Gesamte leere Fläche öffnet den Datei-Dialog (nur im Empty-State).
+  dz.addEventListener('click', () => { if (dz.classList.contains('empty-state')) fileInput.click(); });
+  // Expliziter Button im Empty-State – stopPropagation, damit der Dialog nicht doppelt aufgeht.
+  document.getElementById('open-btn-empty').addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
   let dragDepth = 0;
   window.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; dz.classList.add('dragging'); });
   window.addEventListener('dragover', (e) => { e.preventDefault(); });
@@ -1055,5 +1084,6 @@ function boot() {
   initMap();
   initUI();
   drawProfile();
+  consumeSharedFiles();
 }
 boot();

@@ -29,7 +29,7 @@
       <span>GPX Viewer</span>
     </div>
     <div class="actions">
-      <input id="file-input" type="file" accept=".gpx,.igc,.txt,.air,.openair,application/gpx+xml" multiple hidden />
+      <input id="file-input" type="file" accept=".gpx,.igc,application/gpx+xml" multiple hidden />
       <button id="open-btn" class="btn primary">Dateien öffnen…</button>
       <button id="fit-btn" class="btn" title="Alle Tracks einpassen">Einpassen</button>
       <button id="view3d-btn" class="btn" title="3D-Geländeansicht (echtes Gelände, ohne Key)">3D</button>
@@ -79,8 +79,10 @@
         <path d="M12 16V4m0 0l-4 4m4-4l4 4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"
               fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
-      <p><strong>GPX hierher ziehen oder öffnen</strong></p>
+      <p><strong>GPX hierher ziehen</strong></p>
+      <button id="open-btn-empty" class="btn primary dz-cta" type="button">Dateien öffnen…</button>
       <p class="muted">.gpx und .igc werden unterstützt – alles bleibt lokal auf deinem Gerät.</p>
+      <p class="muted dz-hint">Klicke irgendwo in diesen Bereich, um Dateien auszuwählen.</p>
     </div>
   </div>
 

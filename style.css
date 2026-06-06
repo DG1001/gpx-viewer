@@ -141,10 +141,22 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   pointer-events: none;
 }
 .dropzone.dragging { display: flex; border: 4px dashed var(--accent); }
-.dropzone.empty-state { display: flex; background: var(--bg); }
-.dropzone-inner { text-align: center; color: var(--accent); padding: 32px; }
+/* Im Empty-State ist die ganze Fläche anklickbar (öffnet den Datei-Dialog). */
+.dropzone.empty-state { display: flex; background: var(--bg); pointer-events: auto; cursor: pointer; }
+/* Beim Drüberziehen muss der Drop wieder durchfallen → keine pointer-events. */
+.dropzone.empty-state.dragging { pointer-events: none; }
+.dropzone-inner {
+  text-align: center; color: var(--accent);
+  padding: 48px 40px;
+  border: 2px dashed var(--border); border-radius: 16px;
+  background: var(--panel); box-shadow: var(--shadow);
+  transition: border-color .12s, box-shadow .12s;
+}
+.dropzone.empty-state:hover .dropzone-inner { border-color: var(--accent); box-shadow: 0 4px 14px rgba(30,136,229,.15); }
 .dropzone-inner p { margin: 6px 0; color: var(--text); }
 .dropzone-inner .muted { color: var(--muted); font-size: 13px; }
+.dropzone-inner .dz-cta { margin: 14px 0 6px; font-size: 15px; padding: 10px 20px; }
+.dropzone-inner .dz-hint { font-size: 12px; }
 
 /* ---------- 3D-Overlay ---------- */
 .map3d-overlay { position: fixed; inset: 0; z-index: 2500; background: #0b1622; display: flex; flex-direction: column; }

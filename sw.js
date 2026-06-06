@@ -1,8 +1,10 @@
 // Service Worker – App-Shell-Precache + Runtime-Caches für Leaflet-CDN und OSM-Tiles.
-const VERSION = 'v10';
+const VERSION = 'v11';
 const SHELL_CACHE = `gpxv-shell-${VERSION}`;
 const CDN_CACHE = `gpxv-cdn-${VERSION}`;
 const TILE_CACHE = `gpxv-tiles-${VERSION}`;
+// Versionslos: hält per „Teilen mit…“ empfangene Dateien bis die App sie abholt.
+const SHARE_CACHE = 'gpxv-share';
 
 const SHELL_ASSETS = [
   './',
@@ -26,7 +28,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
-        keys.filter((k) => ![SHELL_CACHE, CDN_CACHE, TILE_CACHE].includes(k)).map((k) => caches.delete(k))
+        keys.filter((k) => ![SHELL_CACHE, CDN_CACHE, TILE_CACHE, SHARE_CACHE].includes(k)).map((k) => caches.delete(k))
       )
     ).then(() => self.clients.claim())
   );
@@ -49,10 +51,38 @@ function staleWhileRevalidate(request, cacheName) {
   );
 }
 
+// Web Share Target: empfängt per „Teilen mit…“ geschickte Dateien, legt sie im
+// SHARE_CACHE ab und leitet zur App weiter (die holt sie beim Start ab).
+async function handleShareTarget(request) {
+  try {
+    const formData = await request.formData();
+    const files = formData.getAll('files').filter((f) => f && typeof f.name === 'string' && f.name);
+    const cache = await caches.open(SHARE_CACHE);
+    for (const key of await cache.keys()) await cache.delete(key);
+    let i = 0;
+    for (const file of files) {
+      const headers = new Headers({
+        'Content-Type': file.type || 'application/octet-stream',
+        'X-Filename': encodeURIComponent(file.name),
+      });
+      await cache.put(`./__shared__/${i++}`, new Response(file, { headers }));
+    }
+  } catch (err) {
+    // Ignorieren – die App startet auch ohne Datei.
+  }
+  return Response.redirect('./?share-target=1', 303);
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  if (req.method !== 'GET') return;
   const url = new URL(req.url);
+
+  if (req.method === 'POST' && url.origin === self.location.origin && url.pathname.endsWith('/share-target')) {
+    event.respondWith(handleShareTarget(req));
+    return;
+  }
+
+  if (req.method !== 'GET') return;
 
   // Karten-Kacheln: OSM, OpenTopoMap, Esri-Satellit, AWS-Terrain (3D-DEM)
   if (/(^|\.)tile\.openstreetmap\.org$/.test(url.hostname) ||
