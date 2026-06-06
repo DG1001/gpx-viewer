@@ -24,6 +24,12 @@ startbar.
 - **Hover-Synchronisation**: Maus über dem Profil → Marker auf der Karte
   (und umgekehrt beim Überfahren der Track-Linie).
 - **Track-Einfärbung** wahlweise pro Track, nach Höhe oder nach Steigen (Gradient).
+- **Segelflug-Analyse:** automatische **Thermik-Erkennung** (Kreisflug über die
+  Drehrate), Bärte mit Steigwert/Höhengewinn/Dauer als Marker auf der Karte und als
+  Band im Profil; **Kreisen-Anteil**, **Gleitzahl (L/D)**, **bestes 30-s-Steigen** und
+  **Windschätzung aus der Kreisdrift** (Pfeil oben rechts). Vario wird geglättet.
+- **Kartenwechsel**: OpenStreetMap / OpenTopoMap / Satellit (Esri) + optionales
+  **Luftraum-Overlay (openAIP)**.
 - **Offline-fähig**: Service Worker cached App-Shell, Leaflet-CDN und Karten-Tiles.
 - **IGC** (Segelflug) optional unterstützt: B-Records (Zeit, Lat/Lon, GPS-/Druckhöhe).
 
@@ -101,6 +107,26 @@ gegeben, lokal `localhost` verwenden.
       stellen → Seite neu laden → App-Shell lädt weiter; bereits besuchte Karten-
       Kacheln bleiben sichtbar.
 - [x] **File-Handler** im Manifest korrekt deklariert (`file_handlers` → `.gpx`).
+
+## Luftraum-Overlay (openAIP)
+
+Das Luftraum-Overlay wird über den Layer-Schalter (oben rechts auf der Karte)
+eingeschaltet. openAIP benötigt einen **kostenlosen API-Key**:
+
+1. Konto auf [openaip.net](https://www.openaip.net) anlegen → *My openAIP → API Keys*.
+2. Beim ersten Einschalten des Overlays fragt die App nach dem Key — er wird **nur
+   lokal** (`localStorage`) gespeichert und bei jeder Kachel-Anfrage mitgesendet.
+
+Ohne Key bleiben die anderen Karten (OSM/Topo/Satellit) voll nutzbar.
+
+## Hinweise zur Segelflug-Analyse
+
+- **Thermik-Erkennung** über die geglättete Drehrate (Schwelle ~6 °/s, Bart ab ~25 s
+  Kreisflug). Sie braucht **Zeitstempel** in der Datei und funktioniert am besten bei
+  feinem Sampling (1–4 s), wie es typische Logger/IGC liefern.
+- **Wind** wird aus dem Netto-Versatz des Kreisflugs geschätzt (über mehrere Kreise
+  mittelt sich die Eigengeschwindigkeit heraus) — eine Näherung, kein Messwert.
+- **Gleitzahl** = horizontale Strecke ÷ Höhenverlust über die Geradeaus-Phasen.
 
 ## Privatsphäre
 

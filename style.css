@@ -156,6 +156,21 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.error { background: #c62828; }
 
+.stats-grid dt.sep, .stats-grid dd.sep { margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--border); }
+.stats-grid dt.sep { font-weight: 600; color: var(--text); }
+
+/* Wind-Control auf der Karte */
+.wind-ctrl {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(255, 255, 255, .92);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 10px; box-shadow: var(--shadow);
+  font-size: 12px; color: var(--text);
+}
+.wind-ctrl .wind-arrow { font-size: 22px; line-height: 1; color: var(--accent); transition: transform .2s; }
+.wind-ctrl .wind-txt { display: flex; flex-direction: column; line-height: 1.25; }
+.wind-ctrl .wind-txt small { color: var(--muted); }
+
 /* Map hover marker */
 .hover-dot {
   width: 14px; height: 14px; border-radius: 50%;

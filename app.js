@@ -12,6 +12,7 @@ const state = {
   colorMode: 'track',    // 'track' | 'ele' | 'climb'
   profileMetric: 'ele',  // 'ele' | 'speed' | 'vario'
   hover: null,           // { trackId, index } | null
+  showThermals: true,    // Thermik-Marker & Wind anzeigen
 };
 
 let map, hoverMarkers = {};   // trackId -> L.marker
@@ -42,6 +43,25 @@ function fmtDist(m) {
 function fmtTime(d) {
   if (!d) return '–';
   return d.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+function fmtMinSec(sec) {
+  if (!isFinite(sec)) return '–';
+  const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+// Kurs (Bearing) zwischen zwei Punkten, -180..180 (0 = Nord)
+function bearing(a, b) {
+  const φ1 = a.lat * Math.PI / 180, φ2 = b.lat * Math.PI / 180;
+  const Δλ = (b.lon - a.lon) * Math.PI / 180;
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return Math.atan2(y, x) * 180 / Math.PI;
+}
+function angDiff(a, b) { let d = b - a; while (d > 180) d -= 360; while (d < -180) d += 360; return d; }
+function compass(deg) {
+  const dirs = ['N', 'NNO', 'NO', 'ONO', 'O', 'OSO', 'SO', 'SSO', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  return dirs[Math.round(((deg % 360) + 360) % 360 / 22.5) % 16];
 }
 
 // ---------------------------------------------------------------------------
@@ -136,18 +156,128 @@ function enrich(points) {
     cum += haversine(points[i - 1], points[i]);
     points[i].dist = cum;
   }
-  // Geschwindigkeit & Vario (Steigen, m/s) zwischen Punkten
-  for (let i = 0; i < points.length; i++) {
+  // Geschwindigkeit, Vario, Kurs & Drehrate zwischen Punkten
+  const n = points.length;
+  for (let i = 0; i < n; i++) {
     const p = points[i];
-    if (i === 0) { p.speed = 0; p.vario = 0; continue; }
+    if (i === 0) { p.speed = 0; p.vario = 0; p.bearing = null; p.turnRate = null; continue; }
     const a = points[i - 1];
     const dt = (a.time && p.time) ? (p.time - a.time) / 1000 : null;
     const dd = p.dist - a.dist;
     p.speed = dt && dt > 0 ? (dd / dt) * 3.6 : null; // km/h
     p.vario = (dt && dt > 0 && a.ele != null && p.ele != null) ? (p.ele - a.ele) / dt : null; // m/s
+    p.bearing = bearing(a, p);
+    p.turnRate = (a.bearing != null && dt && dt > 0) ? angDiff(a.bearing, p.bearing) / dt : null; // °/s
   }
-  // leichte Glättung der Geschwindigkeit (gleitender 5-Punkt-Median wäre besser; hier Mittel)
+  // Vario über ~±3.5 s glätten (barometrisches/GPS-Rauschen dämpfen)
+  for (let i = 0; i < n; i++) {
+    if (points[i].vario == null || !points[i].time) { points[i].varioSmooth = points[i].vario; continue; }
+    let sum = 0, c = 0;
+    for (let j = i; j >= 0 && points[j].time && (points[i].time - points[j].time) / 1000 <= 3.5; j--)
+      if (points[j].vario != null) { sum += points[j].vario; c++; }
+    for (let j = i + 1; j < n && points[j].time && (points[j].time - points[i].time) / 1000 <= 3.5; j++)
+      if (points[j].vario != null) { sum += points[j].vario; c++; }
+    points[i].varioSmooth = c ? sum / c : points[i].vario;
+  }
   return points;
+}
+
+// ---------------------------------------------------------------------------
+// Segelflug-Analyse: Thermik-Erkennung, Wind aus Kreisdrift, Gleitzahl
+// ---------------------------------------------------------------------------
+const TURN_THRESH = 6;   // °/s – ab hier gilt es als Kreisen
+const MIN_THERMAL = 25;  // s – kürzere Kreis-Phasen zählen nicht als Bart
+const GAP_BRIDGE = 8;    // s – kurze Geradeaus-Lücken im Bart überbrücken
+
+function analyzeSoaring(points) {
+  const res = {
+    hasTime: false, thermals: [], circlingTime: 0, glidingTime: 0,
+    thermalGain: 0, avgClimb: null, bestClimb: null, best30: null,
+    glideRatio: null, glideDist: 0, glideLoss: 0, wind: null,
+  };
+  const n = points.length;
+  if (n < 3 || !(points[0].time && points[n - 1].time)) return res;
+  res.hasTime = true;
+
+  // geglättete Drehrate
+  for (let i = 0; i < n; i++) {
+    let sum = 0, c = 0;
+    for (let k = -2; k <= 2; k++) { const j = i + k; if (j > 0 && j < n && points[j].turnRate != null) { sum += points[j].turnRate; c++; } }
+    points[i]._tr = c ? sum / c : 0;
+    points[i].circling = Math.abs(points[i]._tr) > TURN_THRESH;
+  }
+
+  // Kreis-Phasen gruppieren (kurze Lücken überbrücken)
+  const segs = [];
+  let cur = null;
+  for (let i = 0; i < n; i++) {
+    if (points[i].circling) {
+      if (!cur) cur = { start: i, end: i }; else cur.end = i;
+    } else if (cur && points[i].time && points[cur.end].time &&
+               (points[i].time - points[cur.end].time) / 1000 > GAP_BRIDGE) {
+      segs.push(cur); cur = null;
+    }
+  }
+  if (cur) segs.push(cur);
+
+  let sumDx = 0, sumDy = 0, sumDur = 0;
+  for (const seg of segs) {
+    const s = points[seg.start], e = points[seg.end];
+    if (!s.time || !e.time) continue;
+    const dur = (e.time - s.time) / 1000;
+    if (dur < MIN_THERMAL) continue;
+    let la = 0, lo = 0, c = 0;
+    for (let j = seg.start; j <= seg.end; j++) { la += points[j].lat; lo += points[j].lon; c++; points[j].thermal = true; }
+    const center = [la / c, lo / c];
+    const gain = (s.ele != null && e.ele != null) ? e.ele - s.ele : null;
+    const climb = gain != null && dur > 0 ? gain / dur : null;
+    // Wind aus Drift: Nettoversatz des Kreisflugs / Dauer (über viele Kreise mittelt sich die Airspeed weg)
+    const cosLat = Math.cos(center[0] * Math.PI / 180);
+    const dx = (e.lon - s.lon) * cosLat * 111320; // Ost (m)
+    const dy = (e.lat - s.lat) * 111320;           // Nord (m)
+    sumDx += dx; sumDy += dy; sumDur += dur;
+    res.thermals.push({ center, dur, gain, climb, entry: s.ele, exit: e.ele, startTime: s.time, startDist: s.dist, endDist: e.dist });
+    res.circlingTime += dur;
+    if (gain != null && gain > 0) res.thermalGain += gain;
+  }
+
+  if (res.thermals.length) {
+    const valid = res.thermals.filter(t => t.climb != null);
+    if (valid.length) {
+      res.avgClimb = res.circlingTime > 0 ? valid.reduce((a, t) => a + (t.gain || 0), 0) / res.circlingTime : null;
+      res.bestClimb = Math.max(...valid.map(t => t.climb));
+    }
+  }
+  if (sumDur > 0 && (Math.abs(sumDx) + Math.abs(sumDy)) > 0) {
+    const wE = sumDx / sumDur, wN = sumDy / sumDur;        // Drift = downwind
+    const speed = Math.hypot(wE, wN);                       // m/s
+    const from = (Math.atan2(wE, wN) * 180 / Math.PI + 180 + 360) % 360; // Wind kommt aus …
+    res.wind = { speed, from };
+  }
+
+  // Gleit-Anteil & Gleitzahl (nur Geradeaus-Phasen mit Höhenverlust)
+  const totalDur = (points[n - 1].time - points[0].time) / 1000;
+  res.glidingTime = Math.max(0, totalDur - res.circlingTime);
+  for (let i = 1; i < n; i++) {
+    if (points[i].thermal || points[i - 1].thermal) continue;
+    const dd = points[i].dist - points[i - 1].dist;
+    res.glideDist += dd;
+    if (points[i].ele != null && points[i - 1].ele != null && points[i].ele < points[i - 1].ele)
+      res.glideLoss += points[i - 1].ele - points[i].ele;
+  }
+  if (res.glideLoss > 0) res.glideRatio = res.glideDist / res.glideLoss;
+
+  // bestes 30-s-Steigen (Zwei-Zeiger-Fenster)
+  let j = 0;
+  for (let i = 0; i < n; i++) {
+    if (!points[i].time || points[i].ele == null) continue;
+    while (j < n && points[j].time && (points[j].time - points[i].time) / 1000 < 30) j++;
+    if (j < n && points[j].time && points[j].ele != null) {
+      const dt = (points[j].time - points[i].time) / 1000;
+      if (dt > 0) { const cl = (points[j].ele - points[i].ele) / dt; if (res.best30 == null || cl > res.best30) res.best30 = cl; }
+    }
+  }
+  return res;
 }
 
 function computeStats(points) {
@@ -181,12 +311,13 @@ function computeStats(points) {
 function addTrack(rawName, points, fileName) {
   enrich(points);
   const stats = computeStats(points);
+  const soaring = analyzeSoaring(points);
   const color = COLORS[(state.nextId - 1) % COLORS.length];
   const track = {
     id: state.nextId++,
     name: rawName || fileName || `Track ${state.nextId}`,
     fileName,
-    color, visible: true, points, stats,
+    color, visible: true, points, stats, soaring,
   };
   state.tracks.push(track);
   drawTrackOnMap(track);
@@ -200,13 +331,87 @@ function addTrack(rawName, points, fileName) {
 // ---------------------------------------------------------------------------
 // Karte (Leaflet)
 // ---------------------------------------------------------------------------
+let airspaceLayer = null;
+
 function initMap() {
   map = L.map('map', { zoomControl: true, preferCanvas: true }).setView([47.5, 9.5], 7);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap-Mitwirkende',
-    crossOrigin: true,
-  }).addTo(map);
+
+  const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '&copy; OpenStreetMap-Mitwirkende', crossOrigin: true,
+  });
+  const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    maxZoom: 17, attribution: 'Karten: &copy; OpenTopoMap (CC-BY-SA), Daten: &copy; OpenStreetMap', crossOrigin: true,
+  });
+  const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19, attribution: 'Luftbild: &copy; Esri, Maxar, Earthstar Geographics', crossOrigin: true,
+  });
+  osm.addTo(map);
+
+  // openAIP-Luftraum (benötigt kostenlosen API-Key – lokal gespeichert)
+  airspaceLayer = L.tileLayer('https://api.tiles.openaip.net/api/data/openaip/{z}/{x}/{y}.png?apiKey={apiKey}', {
+    maxZoom: 19, maxNativeZoom: 11, opacity: 0.85, crossOrigin: true,
+    apiKey: localStorage.getItem('openaip_key') || '',
+    attribution: 'Luftraum: &copy; <a href="https://www.openaip.net">openAIP</a>',
+  });
+
+  L.control.layers(
+    { 'OpenStreetMap': osm, 'OpenTopoMap': topo, 'Satellit (Esri)': sat },
+    { 'Luftraum (openAIP)': airspaceLayer },
+    { collapsed: true }
+  ).addTo(map);
+
+  map.on('overlayadd', (e) => { if (e.layer === airspaceLayer) ensureOpenaipKey(); });
+
+  initWindControl();
+}
+
+function ensureOpenaipKey() {
+  let key = localStorage.getItem('openaip_key');
+  if (key) return;
+  key = prompt('openAIP benötigt einen kostenlosen API-Key.\n' +
+    'Anlegen unter openaip.net → Login → "My openAIP" → API Keys.\n' +
+    'Der Key bleibt lokal in diesem Browser gespeichert:');
+  if (key && key.trim()) {
+    key = key.trim();
+    localStorage.setItem('openaip_key', key);
+    airspaceLayer.options.apiKey = key;
+    airspaceLayer.redraw();
+    toast('openAIP-Key gespeichert.');
+  } else {
+    map.removeLayer(airspaceLayer);
+    toast('Ohne API-Key kann der Luftraum nicht geladen werden.', true);
+  }
+}
+
+// Wind-Anzeige (Leaflet-Control, oben rechts)
+let windCtrl = null;
+function initWindControl() {
+  const Ctrl = L.Control.extend({
+    onAdd() {
+      const d = L.DomUtil.create('div', 'wind-ctrl');
+      d.id = 'wind-ctrl'; d.style.display = 'none';
+      return d;
+    },
+  });
+  windCtrl = new Ctrl({ position: 'topright' });
+  map.addControl(windCtrl);
+}
+function updateWindControl() {
+  const el = document.getElementById('wind-ctrl');
+  if (!el) return;
+  const t = state.tracks
+    .filter(t => t.visible && state.showThermals && t.soaring && t.soaring.wind)
+    .sort((a, b) => b.stats.dist - a.stats.dist)[0];
+  if (!t) { el.style.display = 'none'; return; }
+  const w = t.soaring.wind;
+  const kmh = (w.speed * 3.6).toFixed(0);
+  const kt = (w.speed * 1.94384).toFixed(0);
+  el.style.display = 'block';
+  el.innerHTML =
+    `<div class="wind-arrow" style="transform:rotate(${w.from}deg)">↓</div>` +
+    `<div class="wind-txt"><strong>${compass(w.from)} ${Math.round(w.from)}°</strong>` +
+    `<small>${kmh} km/h · ${kt} kt</small></div>`;
+  el.title = `Wind aus ${Math.round(w.from)}° (aus Kreisdrift geschätzt, ${t.name})`;
 }
 
 function colorForPoint(track, i) {
@@ -215,9 +420,9 @@ function colorForPoint(track, i) {
     const t = (p.ele - track.stats.minEle) / Math.max(1, track.stats.maxEle - track.stats.minEle);
     return gradient(t); // blau->rot
   }
-  if (state.colorMode === 'climb' && p.vario != null) {
-    const t = Math.max(0, Math.min(1, (p.vario + 3) / 6)); // -3..+3 m/s
-    return gradient(t);
+  if (state.colorMode === 'climb') {
+    const v = p.varioSmooth != null ? p.varioSmooth : p.vario;
+    if (v != null) return gradient(Math.max(0, Math.min(1, (v + 3) / 6))); // -3..+3 m/s
   }
   return track.color;
 }
@@ -248,6 +453,23 @@ function drawTrackOnMap(track) {
   refs.end = L.circleMarker(latlngs[latlngs.length - 1], { radius: 6, color: '#fff', weight: 2, fillColor: '#c62828', fillOpacity: 1 })
     .addTo(map).bindTooltip(`Ende: ${track.name}`);
 
+  // Thermik-Marker
+  refs.thermals = [];
+  if (state.showThermals && track.soaring) {
+    for (const th of track.soaring.thermals) {
+      const cl = th.climb != null ? th.climb : 0;
+      const r = 7 + Math.min(16, Math.max(0, (th.gain || 0) / 60)); // Radius ~ Höhengewinn
+      const m = L.circleMarker(th.center, {
+        radius: r, color: '#fff', weight: 1.5, fillColor: gradient((cl + 3) / 6), fillOpacity: .8,
+      }).addTo(map).bindTooltip(
+        `🌀 Bart · ${th.gain != null ? (th.gain >= 0 ? '+' : '') + Math.round(th.gain) + ' m' : '–'}` +
+        ` · ${cl != null ? cl.toFixed(1) + ' m/s' : '–'} · ${fmtMinSec(th.dur)}`,
+        { direction: 'top' }
+      );
+      refs.thermals.push(m);
+    }
+  }
+
   layerRefs[track.id] = refs;
 }
 
@@ -274,6 +496,7 @@ function removeTrackLayers(id) {
   if (!r) return;
   r.line && map.removeLayer(r.line);
   r.segs.forEach(s => map.removeLayer(s));
+  (r.thermals || []).forEach(m => map.removeLayer(m));
   r.start && map.removeLayer(r.start);
   r.end && map.removeLayer(r.end);
   delete layerRefs[id];
@@ -307,7 +530,7 @@ let plot = null; // { x0,y0,w,h, dMax, vMin, vMax, metric }
 
 function metricValue(p) {
   if (state.profileMetric === 'speed') return p.speed;
-  if (state.profileMetric === 'vario') return p.vario;
+  if (state.profileMetric === 'vario') return p.varioSmooth != null ? p.varioSmooth : p.vario;
   return p.ele;
 }
 function metricLabel() {
@@ -372,6 +595,18 @@ function drawProfile() {
     const d = dMax * i / xTicks; const x = xOf(d);
     ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + h); ctx.strokeStyle = '#f4f6f9'; ctx.stroke();
     ctx.fillText(fmtDist(d), x, padT + h + 4);
+  }
+
+  // Kreisflug-Phasen (Thermik) als Band hinterlegen
+  if (state.showThermals) {
+    for (const t of visible) {
+      if (!t.soaring || !t.soaring.thermals.length) continue;
+      ctx.fillStyle = hexToRgba(t.color, 0.12);
+      for (const th of t.soaring.thermals) {
+        const x1 = xOf(th.startDist), x2 = xOf(th.endDist);
+        ctx.fillRect(x1, padT, Math.max(1.5, x2 - x1), h);
+      }
+    }
   }
 
   // Null-Linie bei Vario
@@ -532,6 +767,20 @@ function renderStats() {
   for (const t of state.tracks) {
     if (!t.visible) continue;
     const s = t.stats;
+    const so = t.soaring;
+    let soHtml = '';
+    if (so && so.hasTime && so.thermals.length) {
+      const circPct = s.duration ? Math.round(so.circlingTime / s.duration * 100) : 0;
+      const wind = so.wind ? `${compass(so.wind.from)} ${Math.round(so.wind.from)}° · ${(so.wind.speed * 3.6).toFixed(0)} km/h` : '–';
+      soHtml = `
+        <dt class="sep">🌀 Bärte</dt><dd class="sep">${so.thermals.length}</dd>
+        <dt>Steigen Ø / best</dt><dd>${so.avgClimb != null ? so.avgClimb.toFixed(1) : '–'} / ${so.bestClimb != null ? so.bestClimb.toFixed(1) : '–'} m/s</dd>
+        <dt>bestes 30 s</dt><dd>${so.best30 != null ? so.best30.toFixed(1) + ' m/s' : '–'}</dd>
+        <dt>Höhe in Bärten</dt><dd>${Math.round(so.thermalGain)} m</dd>
+        <dt>Kreisen-Anteil</dt><dd>${circPct} %</dd>
+        <dt>Gleitzahl Ø</dt><dd>${so.glideRatio != null ? so.glideRatio.toFixed(1) + ' : 1' : '–'}</dd>
+        <dt>Wind (Drift)</dt><dd>${wind}</dd>`;
+    }
     const card = document.createElement('div');
     card.className = 'stats-card';
     card.innerHTML = `
@@ -546,9 +795,11 @@ function renderStats() {
         <dt>min. Höhe</dt><dd>${s.minEle != null ? Math.round(s.minEle) + ' m' : '–'}</dd>
         <dt>Start</dt><dd>${fmtTime(s.start)}</dd>
         <dt>Ende</dt><dd>${fmtTime(s.end)}</dd>
+        ${soHtml}
       </dl>`;
     panel.appendChild(card);
   }
+  updateWindControl();
 }
 
 function toggleVisible(id, vis) {
@@ -623,6 +874,10 @@ function initUI() {
   document.getElementById('colormode').addEventListener('change', (e) => {
     state.colorMode = e.target.value; redrawAllLayers();
   });
+  document.getElementById('thermals-toggle').addEventListener('change', (e) => {
+    state.showThermals = e.target.checked;
+    redrawAllLayers(); renderStats(); drawProfile(); updateWindControl();
+  });
   document.querySelectorAll('input[name=profmetric]').forEach(r => {
     r.addEventListener('change', () => { state.profileMetric = document.querySelector('input[name=profmetric]:checked').value; drawProfile(); });
   });
@@ -662,6 +917,16 @@ function rgbToHex(c) {
   if (c[0] === '#') return c;
   const m = c.match(/\d+/g); if (!m) return '#1e88e5';
   return '#' + m.slice(0, 3).map(n => (+n).toString(16).padStart(2, '0')).join('');
+}
+function hexToRgba(c, a) {
+  if (c[0] === '#') {
+    const h = c.slice(1);
+    const v = h.length === 3 ? h.split('').map(x => x + x).join('') : h;
+    const n = parseInt(v, 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  }
+  const m = c.match(/\d+/g);
+  return m ? `rgba(${m[0]},${m[1]},${m[2]},${a})` : `rgba(30,136,229,${a})`;
 }
 
 // ---------------------------------------------------------------------------
